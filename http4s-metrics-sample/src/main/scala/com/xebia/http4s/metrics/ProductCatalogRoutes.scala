@@ -1,14 +1,14 @@
 package com.xebia.http4s.metrics
 
-import cats.data.{Kleisli, OptionT}
+import cats.data.Kleisli
 import cats.effect.*
 import cats.syntax.all.*
+import com.xebia.http4s.leak.User
 import io.circe.Codec
-//import io.circe.generic.semiauto.*
 import org.http4s.*
 import org.http4s.dsl.Http4sDsl
 import org.http4s.circe.*
-//import org.http4s.implicits.*
+import org.typelevel.log4cats.Logger
 
 import scala.util.Random
 import scala.concurrent.duration.*
@@ -40,9 +40,14 @@ object ProductCatalogRoutes:
     Product("p10", "Google Nest Hub", 2)
   )
 
-  def timedRoutes[F[_]: Async]: HttpRoutes[F] = Kleisli { request =>
-    OptionT.liftF(Async[F].sleep(time.millis)) >> routes.run(request)
-  }
+  private def leak[F[_]: Async: Logger]: F[Unit] =
+    Logger[F].info("Free memory: " + Runtime.getRuntime.freeMemory()) >>
+      Async[F].delay(User.generateNewUser(Random.nextString(999)))
+
+  def memoryLeakRoutes[F[_]: Async: Logger]: HttpRoutes[F] =
+    Kleisli(routes.run(_).semiflatTap(_ => leak))
+
+  def timedRoutes[F[_]: Async]: HttpRoutes[F] = Kleisli(routes.run(_).semiflatTap(_ => Async[F].sleep(time.millis)))
 
   private def routes[F[_]: Concurrent]: HttpRoutes[F] = {
     val dsl = new Http4sDsl[F] {}
@@ -71,7 +76,8 @@ object ProductCatalogRoutes:
           (percentage match
             case p if p <= 70 => Accepted("")
             case p if p <= 80 => BadRequest("")
-            case _ => InternalServerError(""))
+            case _ => InternalServerError("")
+          )
 
       case req @ PUT -> Root / "products" / _ =>
         req.as[Product].attempt >>
@@ -79,7 +85,8 @@ object ProductCatalogRoutes:
             case p if p <= 60 => Ok("")
             case p if p <= 70 => BadRequest("")
             case p if p <= 90 => NotFound("")
-            case _ => InternalServerError(""))
+            case _ => InternalServerError("")
+          )
 
       case DELETE -> Root / "products" / _ =>
         percentage match

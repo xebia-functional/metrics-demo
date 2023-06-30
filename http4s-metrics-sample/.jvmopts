@@ -1,0 +1,5 @@
+-Xmx1G
+-Xms1G
+-XshowSettings:vm
+-XX:+PrintClassHistogram
+-Xlog:gc+heap+exit

@@ -32,3 +32,8 @@ services:
       - 3000:3000
     depends_on:
       - prometheus
+
+  http4s-metrics-sample:
+    image: "ghcr.io/com.xebia/http4s-metrics-sample:latest"
+    ports:
+      - 8080:8080
